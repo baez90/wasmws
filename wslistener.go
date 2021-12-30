@@ -1,3 +1,4 @@
+//go:build !js && !wasm
 // +build !js,!wasm
 
 package wasmws
@@ -15,8 +16,9 @@ import (
 //WebSockListener implements net.Listener and provides connections that are
 //incoming websocket connections
 type WebSockListener struct {
-	ctx       context.Context
-	ctxCancel context.CancelFunc
+	ctx        context.Context
+	ctxCancel  context.CancelFunc
+	acceptOpts *websocket.AcceptOptions
 
 	acceptCh chan net.Conn
 }
@@ -28,12 +30,13 @@ var (
 
 //NewWebSocketListener constructs a new WebSockListener, the provided context
 //is for the lifetime of the listener.
-func NewWebSocketListener(ctx context.Context) *WebSockListener {
+func NewWebSocketListener(ctx context.Context, acceptOpts *websocket.AcceptOptions) *WebSockListener {
 	ctx, cancel := context.WithCancel(ctx)
 	wsl := &WebSockListener{
-		ctx:       ctx,
-		ctxCancel: cancel,
-		acceptCh:  make(chan net.Conn, 8),
+		ctx:        ctx,
+		ctxCancel:  cancel,
+		acceptCh:   make(chan net.Conn, 8),
+		acceptOpts: acceptOpts,
 	}
 	go func() { //Close queued connections
 		<-ctx.Done()
@@ -61,7 +64,7 @@ func (wsl *WebSockListener) ServeHTTP(wtr http.ResponseWriter, req *http.Request
 	default:
 	}
 
-	ws, err := websocket.Accept(wtr, req, nil)
+	ws, err := websocket.Accept(wtr, req, wsl.acceptOpts)
 	if err != nil {
 		log.Printf("WebSockListener: ERROR: Could not accept websocket from %q; Details: %s", req.RemoteAddr, err)
 	}
